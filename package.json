@@ -1,0 +1,14 @@
+{
+  "name": "transcript",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Live conversation transcript in the browser via Deepgram, hosted on Cloudflare Workers",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.163.0"
+  }
+}

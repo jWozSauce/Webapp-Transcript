@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f1115" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Transcript" />
+<title>Live Transcript</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot" id="statusDot"></span>
+      <h1>Live Transcript</h1>
+    </div>
+    <div class="status" id="statusText">Ready</div>
+    <div class="topbar-actions">
+      <button id="copyBtn" class="ghost" title="Copy transcript">Copy</button>
+      <button id="downloadBtn" class="ghost" title="Download .txt">Save</button>
+      <button id="clearBtn" class="ghost danger" title="Clear transcript">Clear</button>
+    </div>
+  </header>
+
+  <main id="transcript" class="transcript" aria-live="polite">
+    <p class="empty" id="emptyHint">Tap <strong>Start</strong> and begin talking. Text appears here as people speak.</p>
+    <div id="segments"></div>
+    <p id="interim" class="interim"></p>
+  </main>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <footer class="controls">
+    <div class="meter" aria-hidden="true"><div id="meterFill" class="meter-fill"></div></div>
+    <button id="startBtn" class="primary">Start</button>
+    <button id="stopBtn" class="secondary" hidden>Stop</button>
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
