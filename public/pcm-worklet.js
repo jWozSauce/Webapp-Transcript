@@ -9,6 +9,7 @@ class PcmProcessor extends AudioWorkletProcessor {
     this.buffer = new Int16Array(this.chunkSize);
     this.offset = 0;
     this.sumSquares = 0;
+    this.peak = 0;
     this.count = 0;
   }
   process(inputs) {
@@ -20,14 +21,17 @@ class PcmProcessor extends AudioWorkletProcessor {
       if (s > 1) s = 1; else if (s < -1) s = -1;
       this.buffer[this.offset++] = s < 0 ? s * 0x8000 : s * 0x7fff;
       this.sumSquares += s * s;
+      const a = s < 0 ? -s : s;
+      if (a > this.peak) this.peak = a;
       this.count++;
       if (this.offset === this.chunkSize) {
         const out = this.buffer;
         this.port.postMessage({ type: 'pcm', buffer: out.buffer }, [out.buffer]);
         this.buffer = new Int16Array(this.chunkSize);
         this.offset = 0;
-        this.port.postMessage({ type: 'level', rms: Math.sqrt(this.sumSquares / this.count) });
+        this.port.postMessage({ type: 'level', rms: Math.sqrt(this.sumSquares / this.count), peak: this.peak });
         this.sumSquares = 0;
+        this.peak = 0;
         this.count = 0;
       }
     }

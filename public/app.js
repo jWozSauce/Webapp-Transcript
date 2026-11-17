@@ -23,19 +23,24 @@
   const MAX_RECONNECTS = 3;
   const STORAGE_KEY = 'transcript.segments.v1';
   const PASSWORD_KEY = 'transcript.password';
+  const GAIN_KEY = 'transcript.gainDb';
+  const METER_FLOOR_DB = -60;   // left edge of the meter
+  const CLIP_PEAK = 0.985;      // peak sample level treated as clipping
 
   // ---- DOM -----------------------------------------------------------------
   const $ = (id) => document.getElementById(id);
   const el = {
     start: $('startBtn'), stop: $('stopBtn'), copy: $('copyBtn'), download: $('downloadBtn'), clear: $('clearBtn'),
     segments: $('segments'), interim: $('interim'), empty: $('emptyHint'), transcript: $('transcript'),
-    status: $('statusText'), dot: $('statusDot'), banner: $('banner'), meter: $('meterFill'),
+    status: $('statusText'), dot: $('statusDot'), banner: $('banner'),
+    meter: $('meter'), meterFill: $('meterFill'), meterPeak: $('meterPeak'), meterDb: $('meterDb'),
+    gain: $('gain'), gainValue: $('gainValue'),
   };
 
   // ---- State ---------------------------------------------------------------
   let segments = loadSegments();      // [{speaker: number|null, text: string, t: epochMs}]
   let listening = false;
-  let stream = null, audioCtx = null, workletNode = null, source = null;
+  let stream = null, audioCtx = null, workletNode = null, source = null, gainNode = null;
   let ws = null, keepAliveTimer = null, reconnects = 0;
   let pendingAudio = [];             // chunks captured before the socket opened
   let wakeLock = null;
@@ -75,6 +80,61 @@
     const t = el.transcript;
     stickToBottom = t.scrollHeight - t.scrollTop - t.clientHeight < 40;
   });
+
+  // ---- Level meter ---------------------------------------------------------
+  // Shows the signal *after* the sensitivity gain, i.e. what Deepgram hears.
+  let meterLevel = 0, meterPeakPos = 0, peakHoldUntil = 0, clipUntil = 0;
+  const toDb = (x) => (x > 0 ? 20 * Math.log10(x) : -Infinity);
+  const dbToPct = (db) => Math.max(0, Math.min(100, ((db - METER_FLOOR_DB) / -METER_FLOOR_DB) * 100));
+
+  function updateMeter(rms, peak) {
+    const now = performance.now();
+    const rmsDb = toDb(rms);
+    const target = dbToPct(rmsDb);
+    // Fast attack, slower release so speech reads as a steady bar, not a flicker.
+    meterLevel = target > meterLevel ? target : meterLevel * 0.85 + target * 0.15;
+    el.meterFill.style.setProperty('--level', `${meterLevel.toFixed(1)}%`);
+
+    const peakPct = dbToPct(toDb(peak));
+    if (peakPct >= meterPeakPos || now > peakHoldUntil) { meterPeakPos = peakPct; peakHoldUntil = now + 1200; }
+    el.meterPeak.style.left = `calc(${meterPeakPos.toFixed(1)}% - 1px)`;
+    el.meterPeak.style.opacity = meterPeakPos > 0 ? '1' : '0';
+
+    if (peak >= CLIP_PEAK) clipUntil = now + 600;
+    el.meter.classList.toggle('clip', now < clipUntil);
+
+    // Readout follows the smoothed bar so the number and the bar agree.
+    const shownDb = METER_FLOOR_DB + (meterLevel / 100) * -METER_FLOOR_DB;
+    el.meterDb.textContent = meterLevel > 0.5 ? `${shownDb.toFixed(0)} dB` : '\u2212\u221E dB';
+    el.meter.setAttribute('aria-valuenow', String(Math.round(shownDb)));
+  }
+  function resetMeter() {
+    meterLevel = 0; meterPeakPos = 0; clipUntil = 0;
+    el.meterFill.style.setProperty('--level', '0%');
+    el.meterPeak.style.opacity = '0';
+    el.meter.classList.remove('clip');
+    el.meterDb.textContent = '\u2212\u221E dB';
+  }
+
+  // ---- Sensitivity (input gain) --------------------------------------------
+  // A dB slider from -20 to +20, applied with a GainNode before the worklet.
+  // Changing it while listening takes effect immediately.
+  function gainDb() { return Number(el.gain.value) || 0; }
+  function applyGain() {
+    const db = gainDb();
+    const linear = Math.pow(10, db / 20);
+    el.gainValue.textContent = `${db > 0 ? '+' : ''}${db} dB`;
+    if (gainNode && audioCtx) gainNode.gain.setTargetAtTime(linear, audioCtx.currentTime, 0.02);
+    try { localStorage.setItem(GAIN_KEY, String(db)); } catch { /* ignore */ }
+  }
+  (function initGain() {
+    let saved = null;
+    try { saved = localStorage.getItem(GAIN_KEY); } catch { /* ignore */ }
+    if (saved != null && !Number.isNaN(Number(saved))) el.gain.value = String(Math.max(-20, Math.min(20, Number(saved))));
+    applyGain();
+  })();
+  el.gain.addEventListener('input', applyGain);
+  el.gain.addEventListener('dblclick', () => { el.gain.value = '0'; applyGain(); });
 
   // ---- Persistence ---------------------------------------------------------
   function loadSegments() {
@@ -235,6 +295,8 @@
     await audioCtx.audioWorklet.addModule('pcm-worklet.js');
 
     source = audioCtx.createMediaStreamSource(stream);
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = Math.pow(10, gainDb() / 20);
     workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor', { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1 });
     workletNode.port.onmessage = (e) => {
       const m = e.data;
@@ -242,10 +304,11 @@
         if (ws && ws.readyState === WebSocket.OPEN) ws.send(m.buffer);
         else if (pendingAudio.length < 60) pendingAudio.push(m.buffer); // ~5 s buffer while connecting
       } else if (m.type === 'level') {
-        el.meter.style.height = `${Math.min(100, Math.round(m.rms * 400))}%`;
+        updateMeter(m.rms, m.peak);
       }
     };
-    source.connect(workletNode);
+    source.connect(gainNode);
+    gainNode.connect(workletNode);
 
     stream.getAudioTracks()[0].addEventListener('ended', () => {
       if (listening) failStop('Microphone was disconnected.');
@@ -255,12 +318,13 @@
 
   async function stopAudio() {
     try { if (source) source.disconnect(); } catch { /* ignore */ }
+    try { if (gainNode) gainNode.disconnect(); } catch { /* ignore */ }
     try { if (workletNode) { workletNode.port.onmessage = null; workletNode.disconnect(); } } catch { /* ignore */ }
     if (stream) for (const t of stream.getTracks()) t.stop();
     if (audioCtx) { try { await audioCtx.close(); } catch { /* ignore */ } }
-    source = workletNode = stream = audioCtx = null;
+    source = gainNode = workletNode = stream = audioCtx = null;
     pendingAudio = [];
-    el.meter.style.height = '0%';
+    resetMeter();
   }
 
   // ---- Wake lock (keep the screen on while listening) ----------------------

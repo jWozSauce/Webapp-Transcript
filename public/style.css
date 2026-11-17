@@ -76,9 +76,42 @@ button[disabled] { opacity: .5; cursor: default; }
 .banner.info { background: #1d2a3a; color: #d3e6ff; border-color: #2b445c; }
 
 .controls {
-  display: flex; gap: 12px; align-items: center;
+  display: flex; flex-direction: column; gap: 10px;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border); background: var(--panel);
 }
-.meter { width: 8px; height: 52px; background: var(--border); border-radius: 4px; overflow: hidden; display: flex; align-items: flex-end; }
-.meter-fill { width: 100%; height: 0%; background: var(--accent); transition: height .08s linear; }
+.row { display: grid; grid-template-columns: 86px 1fr 64px; align-items: center; gap: 10px; }
+.row-label { font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+.row-value { font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.buttons { display: flex; gap: 12px; }
+
+/* Level meter: 0% = -60 dBFS, 100% = 0 dBFS. Green to -12, yellow to -3, red above. */
+.meter {
+  position: relative; height: 14px; border-radius: 7px; overflow: hidden; background: var(--border);
+}
+.meter-fill {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, var(--accent) 0 80%, #ffe66b 80% 95%, var(--danger) 95% 100%);
+  /* The gradient spans the whole bar; the level just reveals it from the left. */
+  clip-path: inset(0 calc(100% - var(--level, 0%)) 0 0);
+  transition: clip-path .06s linear;
+}
+.meter-peak {
+  position: absolute; top: 0; bottom: 0; width: 2px; left: 0; background: var(--text); opacity: 0;
+  transition: left .06s linear, opacity .3s;
+}
+.meter.clip { box-shadow: 0 0 0 2px var(--danger); }
+.meter.clip .meter-fill { background: var(--danger); }
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--border); }
+input[type="range"]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--border); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 26px; height: 26px; margin-top: -10px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--panel); box-shadow: 0 1px 4px rgba(0,0,0,.4);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel);
+}

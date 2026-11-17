@@ -37,9 +37,23 @@
   <div id="banner" class="banner" hidden></div>
 
   <footer class="controls">
-    <div class="meter" aria-hidden="true"><div id="meterFill" class="meter-fill"></div></div>
-    <button id="startBtn" class="primary">Start</button>
-    <button id="stopBtn" class="secondary" hidden>Stop</button>
+    <div class="row">
+      <span class="row-label">Level</span>
+      <div class="meter" id="meter" role="meter" aria-label="Input level" aria-valuemin="-60" aria-valuemax="0" aria-valuenow="-60">
+        <div id="meterFill" class="meter-fill"></div>
+        <div id="meterPeak" class="meter-peak"></div>
+      </div>
+      <span id="meterDb" class="row-value">&minus;&infin; dB</span>
+    </div>
+    <div class="row">
+      <label for="gain" class="row-label">Sensitivity</label>
+      <input type="range" id="gain" min="-20" max="20" step="1" value="0" aria-label="Input sensitivity in decibels" />
+      <span id="gainValue" class="row-value">0 dB</span>
+    </div>
+    <div class="buttons">
+      <button id="startBtn" class="primary">Start</button>
+      <button id="stopBtn" class="secondary" hidden>Stop</button>
+    </div>
   </footer>
 </div>
 <script src="app.js"></script>
